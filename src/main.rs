@@ -116,7 +116,14 @@ async fn run_commit(
                             ActorResult::Success(ChildResult { actor_id, result }) => {
                                 if let Some(bytes) = result {
                                     if let Ok(data) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                                        println!("\n✅ Commit operation completed");
+                                        // Check if the operation was successful or not
+                                        let success = data.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
+                                        
+                                        if success {
+                                            println!("\n✅ Commit operation completed successfully");
+                                        } else {
+                                            println!("\n⚠️ Commit operation completed with issues");
+                                        }
                                         
                                         // Extract message
                                         if let Some(message) = data.get("message").and_then(|m| m.as_str()) {
@@ -128,14 +135,26 @@ async fn run_commit(
                                             println!("Commit hash: {}", hash);
                                         }
                                         
+                                        // Display the commit message if available
+                                        if let Some(commit_msg) = data.get("commit_message").and_then(|m| m.as_str()) {
+                                            println!("\n💬 Commit message:");
+                                            println!("  {}", commit_msg);
+                                        }
+                                        
                                         // Show summary of changes if available
                                         let files = data.get("files_changed").and_then(|f| f.as_u64()).unwrap_or(0);
                                         let ins = data.get("insertions").and_then(|i| i.as_u64()).unwrap_or(0);
                                         let dels = data.get("deletions").and_then(|d| d.as_u64()).unwrap_or(0);
                                         
                                         if files > 0 || ins > 0 || dels > 0 {
-                                            println!("Summary: {} files changed, {} insertions(+), {} deletions(-)", 
-                                                     files, ins, dels);
+                                            println!("\n📊 Change summary:");
+                                            println!("  {} files changed", files);
+                                            if ins > 0 {
+                                                println!("  {} insertions(+)", ins);
+                                            }
+                                            if dels > 0 {
+                                                println!("  {} deletions(-)", dels);
+                                            }
                                         }
                                     } else {
                                         println!("Result from {}: {:?}", actor_id, String::from_utf8_lossy(&bytes));
