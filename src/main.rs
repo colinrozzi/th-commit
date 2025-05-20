@@ -105,9 +105,10 @@ async fn run_commit(
                     ManagementResponse::ActorResult(result) => {
                         match result {
                             ActorResult::Success(ChildResult { actor_id, result }) => {
+                                println!("{} {:?}", actor_id, result);
                             }
                             ActorResult::Error(ChildError { actor_id, error }) => {
-
+                                println!("{} {}", actor_id, error);
                             }
                         }
                         break;
