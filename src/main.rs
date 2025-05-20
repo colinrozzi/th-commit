@@ -86,8 +86,8 @@ async fn run_commit(
         .send(ManagementCommand::StartActor {
             manifest,
             initial_state: Some(initial_state_bytes),
-            parent: false,
-            subscribe: true, // Subscribe to get updates
+            parent: true,
+            subscribe: false, // Subscribe to get updates
         })
         .await
         .context("Failed to send StartActor command")?;
