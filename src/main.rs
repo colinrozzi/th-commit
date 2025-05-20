@@ -2,10 +2,13 @@ use anyhow::{Context, Result};
 use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Instant;
 use theater::client::TheaterConnection;
 use theater::messages::ActorResult;
 use theater::messages::{ChildError, ChildResult};
 use theater::theater_server::{ManagementCommand, ManagementResponse};
+
+mod ui;
 
 // Default Theater server address
 const DEFAULT_SERVER_ADDRESS: &str = "127.0.0.1:9000";
@@ -18,6 +21,9 @@ const COMMIT_ACTOR_MANIFEST: &str =
 async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt::init();
+
+    // Start a timer to track execution time
+    let start_time = Instant::now();
 
     // Get the current directory
     let current_dir = env::current_dir().context("Failed to get current directory")?;
@@ -32,25 +38,36 @@ async fn main() -> Result<()> {
         .parse()
         .context("Invalid server address format")?;
 
-    println!("🎭 Theater Commit");
-    println!("Repository: {}", current_dir.display());
-    println!("Connecting to Theater server at {}...", server_address);
+    // Variable to track operation success
+    let mut operation_success = true;
+    
+    // Display the styled header
+    ui::print_header();
+    
+    // Print repository and server info
+    ui::print_item("Repository", &current_dir.display().to_string(), Some("highlight"));
+    ui::print_item("Theater server", &server_address.to_string(), Some("highlight"));
+    ui::print_status("Connecting to Theater server...", "info");
 
     // Connect to the Theater server
     let mut connection = connect_to_server(server_address)
         .await
         .context("Failed to connect to Theater server")?;
 
-    println!("✅ Connected to Theater server");
+    ui::print_status("Connected to Theater server", "success");
 
     // Display a visual separator
-    println!("\n{}", "-".repeat(50));
+    ui::print_separator();
 
     // Run the commit process
-    run_commit(&mut connection, current_dir, api_key).await?;
+    operation_success = run_commit(&mut connection, current_dir, api_key).await?;
 
     // Display a visual separator at the end
-    println!("{}", "-".repeat(50));
+    ui::print_separator();
+    
+    // Print completion message with time
+    let duration = start_time.elapsed().as_secs_f64();
+    ui::print_completion(operation_success, duration);
 
     Ok(())
 }
@@ -67,8 +84,9 @@ async fn run_commit(
     connection: &mut TheaterConnection,
     repo_path: PathBuf,
     api_key: String,
-) -> Result<()> {
-    println!("⏳ Starting commit process...");
+) -> Result<bool> {
+    ui::print_section("Operation Progress");
+    ui::print_status("Starting commit process", "working");
 
     // Prepare the initial state for the commit-actor
     let initial_state = serde_json::json!({
@@ -84,7 +102,7 @@ async fn run_commit(
     let initial_state_bytes =
         serde_json::to_vec(&initial_state).context("Failed to serialize initial state")?;
 
-    println!("🔍 Checking repository: {}", repo_path.display());
+    ui::print_status(format!("Checking repository: {}", repo_path.display()), "analyzing");
 
     // Start the commit-actor
     connection
@@ -97,16 +115,19 @@ async fn run_commit(
         .await
         .context("Failed to send StartActor command")?;
 
-    println!("🤖 Starting Theater commit actor...");
+    ui::print_status("Starting Theater commit actor", "robot");
 
+    // Operation success flag
+    let mut operation_success = false;
+    
     loop {
         tokio::select! {
             Ok(msg) = connection.receive() => {
                 match msg {
                     ManagementResponse::ActorStarted { id } => {
-                        println!("✅ Commit actor started! (ID: {})", id);
-                        println!("📁 Analyzing changes in repository...");
-                        println!("\n⏳ Working: This may take a moment...");
+                        ui::print_status(format!("Commit actor started! (ID: {})", id), "success");
+                        ui::print_status("Analyzing changes in repository", "files");
+                        ui::print_status("Working: This may take a moment", "working");
                     },
                     ManagementResponse::ActorResult(result) => {
                         match result {
@@ -115,8 +136,6 @@ async fn run_commit(
                                     if let Ok(data) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                                         // First check if we're using the new status_msg format
                                         if let Some(status_msg) = data.get("status_msg").and_then(|s| s.as_str()) {
-                                            println!("\n✅ Commit operation completed");
-
                                             // Parse the pipe-delimited format
                                             let mut success = false;
                                             let mut message = None;
@@ -150,58 +169,75 @@ async fn run_commit(
                                                 }
                                             }
 
+                                            // Print results section
+                                            ui::print_section("📋 Results");
+                                            
+                                            // Print operation status
+                                            if success {
+                                                ui::print_status("Commit operation completed", "success");
+                                                operation_success = true;
+                                            } else {
+                                                ui::print_status("Commit operation completed with issues", "warning");
+                                                operation_success = false;
+                                            }
+                                            
                                             // Print message
                                             if let Some(msg) = message {
-                                                println!("{}", msg);
+                                                ui::print_item("Message", &msg, if success { Some("success") } else { Some("warning") });
                                             }
 
                                             // Print commit hash
                                             if let Some(h) = hash {
-                                                println!("Commit hash: {}", h);
+                                                ui::print_item("Commit hash", h, Some("info"));
                                             }
 
-                                            // Print commit message
+                                            // Print commit message in a box
                                             if let Some(cm) = commit_msg {
-                                                println!("\n💬 Commit message:");
-                                                println!("  {}", cm);
+                                                ui::print_status("Commit message", "message");
+                                                ui::print_commit_message(cm);
                                             }
 
                                             // Print changes summary
                                             if files > 0 || ins > 0 || dels > 0 {
-                                                println!("\n📊 Change summary:");
-                                                println!("  {} files changed", files);
+                                                ui::print_section("📊 Change Summary");
+                                                ui::print_item("Files changed", &files.to_string(), Some("highlight"));
                                                 if ins > 0 {
-                                                    println!("  {} insertions(+)", ins);
+                                                    ui::print_item("Insertions", &format!("+{}", ins), Some("success"));
                                                 }
                                                 if dels > 0 {
-                                                    println!("  {} deletions(-)", dels);
+                                                    ui::print_item("Deletions", &format!("-{}", dels), Some("error"));
                                                 }
                                             }
                                         } else {
                                             // Fall back to the regular JSON format
                                             // Check if the operation was successful or not
                                             let success = data.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
+                                            
+                                            // Print results section
+                                            ui::print_section("📋 Results");
 
                                             if success {
-                                                println!("\n✅ Commit operation completed successfully");
+                                                ui::print_status("Commit operation completed successfully", "success");
+                                                operation_success = true;
                                             } else {
-                                                println!("\n⚠️ Commit operation completed with issues");
+                                                ui::print_status("Commit operation completed with issues", "warning");
+                                                operation_success = false;
                                             }
 
                                             // Extract message
                                             if let Some(message) = data.get("message").and_then(|m| m.as_str()) {
-                                                println!("{}", message);
+                                                ui::print_item("Message", message, if success { Some("success") } else { Some("warning") });
                                             }
 
                                             // Extract commit hash if available
                                             if let Some(hash) = data.get("commit_hash").and_then(|h| h.as_str()) {
-                                                println!("Commit hash: {}", hash);
+                                                ui::print_item("Commit hash", hash, Some("info"));
                                             }
 
                                             // Display the commit message if available
                                             if let Some(commit_msg) = data.get("commit_message").and_then(|m| m.as_str()) {
-                                                println!("\n💬 Commit message:");
-                                                println!("  {}", commit_msg);
+                                                ui::print_status("Commit message", "message");
+                                                ui::print_commit_message(commit_msg);
                                             }
 
                                             // Show summary of changes if available
@@ -210,39 +246,45 @@ async fn run_commit(
                                             let dels = data.get("deletions").and_then(|d| d.as_u64()).unwrap_or(0);
 
                                             if files > 0 || ins > 0 || dels > 0 {
-                                                println!("\n📊 Change summary:");
-                                                println!("  {} files changed", files);
+                                                ui::print_section("📊 Change Summary");
+                                                ui::print_item("Files changed", &files.to_string(), Some("highlight"));
                                                 if ins > 0 {
-                                                    println!("  {} insertions(+)", ins);
+                                                    ui::print_item("Insertions", &format!("+{}", ins), Some("success"));
                                                 }
                                                 if dels > 0 {
-                                                    println!("  {} deletions(-)", dels);
+                                                    ui::print_item("Deletions", &format!("-{}", dels), Some("error"));
                                                 }
                                             }
                                         }
                                     } else {
-                                        println!("Result from {}: Unable to parse JSON", actor_id);
+                                        ui::print_status(format!("Result from {}: Unable to parse JSON", actor_id), "error");
                                     }
                                 } else {
-                                    println!("Result from {}: No data returned", actor_id);
+                                    ui::print_status(format!("Result from {}: No data returned", actor_id), "warning");
                                 }
                             }
                             ActorResult::Error(ChildError { actor_id, error }) => {
-                                println!("❌ Error from actor {}: {}", actor_id, error);
+                                ui::print_section("📋 Results");
+                                ui::print_status(format!("Error from actor {}", actor_id), "error");
+                                ui::print_item("Error details", &error.to_string(), Some("error"));
+                                operation_success = false;
                             }
                         }
                         break;
                     }
                     ManagementResponse::Error { error } => {
-                        println!("❌ Error starting commit actor: {:?}", error);
+                        operation_success = false;
+                        ui::print_section("📋 Results");
+                        ui::print_status("Error starting commit actor", "error");
+                        ui::print_item("Error details", &format!("{:?}", error), Some("error"));
                     }
                     _ => {
-                        println!("❓ Unexpected response: {:?}", msg);
+                        ui::print_status(format!("Unexpected response: {:?}", msg), "warning");
                     }
                 }
             }
         }
     }
 
-    Ok(())
+    Ok(operation_success)
 }
