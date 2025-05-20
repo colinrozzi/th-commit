@@ -3,12 +3,9 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use theater::client::TheaterConnection;
-use theater::events::EventData;
-use theater::id::TheaterId;
 use theater::messages::ActorResult;
 use theater::messages::{ChildError, ChildResult};
 use theater::theater_server::{ManagementCommand, ManagementResponse};
-use theater::ChainEvent;
 
 // Default Theater server address
 const DEFAULT_SERVER_ADDRESS: &str = "127.0.0.1:9000";
