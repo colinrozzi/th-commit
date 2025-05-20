@@ -45,10 +45,10 @@ async fn main() -> Result<()> {
 
     // Display a visual separator
     println!("\n{}", "-".repeat(50));
-    
+
     // Run the commit process
     run_commit(&mut connection, current_dir, api_key).await?;
-    
+
     // Display a visual separator at the end
     println!("{}", "-".repeat(50));
 
@@ -88,7 +88,7 @@ async fn run_commit(
     // println!("Starting commit-actor...");
 
     println!("🔍 Checking repository: {}", repo_path.display());
-    
+
     // Start the commit-actor
     connection
         .send(ManagementCommand::StartActor {
@@ -99,7 +99,7 @@ async fn run_commit(
         })
         .await
         .context("Failed to send StartActor command")?;
-        
+
     println!("🤖 Starting Theater commit actor...");
 
     loop {
@@ -118,34 +118,36 @@ async fn run_commit(
                                     if let Ok(data) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                                         // Check if the operation was successful or not
                                         let success = data.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
-                                        
+
                                         if success {
                                             println!("\n✅ Commit operation completed successfully");
                                         } else {
                                             println!("\n⚠️ Commit operation completed with issues");
                                         }
-                                        
+
+                                        println!("{}", data);
+
                                         // Extract message
                                         if let Some(message) = data.get("message").and_then(|m| m.as_str()) {
                                             println!("{}", message);
                                         }
-                                        
+
                                         // Extract commit hash if available
                                         if let Some(hash) = data.get("commit_hash").and_then(|h| h.as_str()) {
                                             println!("Commit hash: {}", hash);
                                         }
-                                        
+
                                         // Display the commit message if available
                                         if let Some(commit_msg) = data.get("commit_message").and_then(|m| m.as_str()) {
                                             println!("\n💬 Commit message:");
                                             println!("  {}", commit_msg);
                                         }
-                                        
+
                                         // Show summary of changes if available
                                         let files = data.get("files_changed").and_then(|f| f.as_u64()).unwrap_or(0);
                                         let ins = data.get("insertions").and_then(|i| i.as_u64()).unwrap_or(0);
                                         let dels = data.get("deletions").and_then(|d| d.as_u64()).unwrap_or(0);
-                                        
+
                                         if files > 0 || ins > 0 || dels > 0 {
                                             println!("\n📊 Change summary:");
                                             println!("  {} files changed", files);
