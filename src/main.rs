@@ -84,9 +84,6 @@ async fn run_commit(
     let initial_state_bytes =
         serde_json::to_vec(&initial_state).context("Failed to serialize initial state")?;
 
-    // This line is now redundant as we have a more detailed message
-    // println!("Starting commit-actor...");
-
     println!("🔍 Checking repository: {}", repo_path.display());
 
     // Start the commit-actor
@@ -115,51 +112,119 @@ async fn run_commit(
                         match result {
                             ActorResult::Success(ChildResult { actor_id, result }) => {
                                 if let Some(bytes) = result {
+                                    // For debugging: print the raw response
+                                    println!("Raw response: {}", String::from_utf8_lossy(&bytes));
+                                    
                                     if let Ok(data) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                                        // Check if the operation was successful or not
-                                        let success = data.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
-
-                                        if success {
-                                            println!("\n✅ Commit operation completed successfully");
-                                        } else {
-                                            println!("\n⚠️ Commit operation completed with issues");
-                                        }
-
-                                        println!("{}", data);
-
-                                        // Extract message
-                                        if let Some(message) = data.get("message").and_then(|m| m.as_str()) {
-                                            println!("{}", message);
-                                        }
-
-                                        // Extract commit hash if available
-                                        if let Some(hash) = data.get("commit_hash").and_then(|h| h.as_str()) {
-                                            println!("Commit hash: {}", hash);
-                                        }
-
-                                        // Display the commit message if available
-                                        if let Some(commit_msg) = data.get("commit_message").and_then(|m| m.as_str()) {
-                                            println!("\n💬 Commit message:");
-                                            println!("  {}", commit_msg);
-                                        }
-
-                                        // Show summary of changes if available
-                                        let files = data.get("files_changed").and_then(|f| f.as_u64()).unwrap_or(0);
-                                        let ins = data.get("insertions").and_then(|i| i.as_u64()).unwrap_or(0);
-                                        let dels = data.get("deletions").and_then(|d| d.as_u64()).unwrap_or(0);
-
-                                        if files > 0 || ins > 0 || dels > 0 {
-                                            println!("\n📊 Change summary:");
-                                            println!("  {} files changed", files);
-                                            if ins > 0 {
-                                                println!("  {} insertions(+)", ins);
+                                        // First check if we're using the new status_msg format
+                                        if let Some(status_msg) = data.get("status_msg").and_then(|s| s.as_str()) {
+                                            println!("\n✅ Commit operation completed");
+                                            
+                                            // Parse the pipe-delimited format
+                                            let mut success = false;
+                                            let mut message = None;
+                                            let mut hash = None;
+                                            let mut commit_msg = None;
+                                            let mut files = 0;
+                                            let mut ins = 0;
+                                            let mut dels = 0;
+                                            
+                                            // Parse each field
+                                            for field in status_msg.split("|") {
+                                                if let Some((key, value)) = field.split_once(":") {
+                                                    match key {
+                                                        "STATUS" => success = value == "true",
+                                                        "MESSAGE" => message = Some(value),
+                                                        "HASH" => {
+                                                            if value != "none" {
+                                                                hash = Some(value);
+                                                            }
+                                                        },
+                                                        "COMMIT_MSG" => {
+                                                            if value != "none" {
+                                                                commit_msg = Some(value);
+                                                            }
+                                                        },
+                                                        "FILES" => files = value.parse().unwrap_or(0),
+                                                        "INS" => ins = value.parse().unwrap_or(0),
+                                                        "DELS" => dels = value.parse().unwrap_or(0),
+                                                        _ => {}
+                                                    }
+                                                }
                                             }
-                                            if dels > 0 {
-                                                println!("  {} deletions(-)", dels);
+                                            
+                                            // Print message
+                                            if let Some(msg) = message {
+                                                println!("{}", msg);
+                                            }
+                                            
+                                            // Print commit hash
+                                            if let Some(h) = hash {
+                                                println!("Commit hash: {}", h);
+                                            }
+                                            
+                                            // Print commit message
+                                            if let Some(cm) = commit_msg {
+                                                println!("\n💬 Commit message:");
+                                                println!("  {}", cm);
+                                            }
+                                            
+                                            // Print changes summary
+                                            if files > 0 || ins > 0 || dels > 0 {
+                                                println!("\n📊 Change summary:");
+                                                println!("  {} files changed", files);
+                                                if ins > 0 {
+                                                    println!("  {} insertions(+)", ins);
+                                                }
+                                                if dels > 0 {
+                                                    println!("  {} deletions(-)", dels);
+                                                }
+                                            }
+                                        } else {
+                                            // Fall back to the regular JSON format
+                                            // Check if the operation was successful or not
+                                            let success = data.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
+                                            
+                                            if success {
+                                                println!("\n✅ Commit operation completed successfully");
+                                            } else {
+                                                println!("\n⚠️ Commit operation completed with issues");
+                                            }
+                                            
+                                            // Extract message
+                                            if let Some(message) = data.get("message").and_then(|m| m.as_str()) {
+                                                println!("{}", message);
+                                            }
+                                            
+                                            // Extract commit hash if available
+                                            if let Some(hash) = data.get("commit_hash").and_then(|h| h.as_str()) {
+                                                println!("Commit hash: {}", hash);
+                                            }
+                                            
+                                            // Display the commit message if available
+                                            if let Some(commit_msg) = data.get("commit_message").and_then(|m| m.as_str()) {
+                                                println!("\n💬 Commit message:");
+                                                println!("  {}", commit_msg);
+                                            }
+                                            
+                                            // Show summary of changes if available
+                                            let files = data.get("files_changed").and_then(|f| f.as_u64()).unwrap_or(0);
+                                            let ins = data.get("insertions").and_then(|i| i.as_u64()).unwrap_or(0);
+                                            let dels = data.get("deletions").and_then(|d| d.as_u64()).unwrap_or(0);
+                                            
+                                            if files > 0 || ins > 0 || dels > 0 {
+                                                println!("\n📊 Change summary:");
+                                                println!("  {} files changed", files);
+                                                if ins > 0 {
+                                                    println!("  {} insertions(+)", ins);
+                                                }
+                                                if dels > 0 {
+                                                    println!("  {} deletions(-)", dels);
+                                                }
                                             }
                                         }
                                     } else {
-                                        println!("Result from {}: {:?}", actor_id, String::from_utf8_lossy(&bytes));
+                                        println!("Result from {}: Unable to parse JSON", actor_id);
                                     }
                                 } else {
                                     println!("Result from {}: No data returned", actor_id);
