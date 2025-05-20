@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use theater::client::TheaterConnection;
 use theater::events::EventData;
 use theater::id::TheaterId;
+use theater::messages::ActorResult;
 use theater::theater_server::{ManagementCommand, ManagementResponse};
 use theater::ChainEvent;
 
@@ -130,46 +131,14 @@ async fn monitor_actor_progress(
 
     while !completed {
         match connection.receive().await {
-            Ok(ManagementResponse::ActorEvent { event }) => {
-                // Look for shutdown events
-                if let Some(data) = event_shutdown_data(&event) {
-                    println!("🔚 Actor shutdown: {:?}", data);
-                    completed = true;
-                }
-
-                // Handle log messages
-                if let Some(log) = event_log(&event) {
-                    // Special handling for important messages
-                    if log.contains("Generated commit message") {
-                        let message = log
-                            .split_once("Generated commit message: ")
-                            .map(|(_, msg)| msg.trim())
-                            .unwrap_or("");
-                        println!("✏️  Commit message: {}", message);
-                    } else if log.contains("Commit created with hash") {
-                        let hash = log
-                            .split_once("Commit created with hash: ")
-                            .map(|(_, hash)| hash.trim())
-                            .unwrap_or("");
-                        println!("🔢 Commit hash: {}", hash);
-                    } else if log.contains("Push successful") {
-                        println!("🚀 Changes pushed to remote");
-                    } else if log.contains("error")
-                        || log.contains("Error")
-                        || log.contains("failed")
-                    {
-                        println!("⚠️  {}", log);
-                    } else if log.contains("No changes to commit") {
-                        println!("📭 No changes to commit");
-                    } else if log.contains("Not a git repository") {
-                        println!("❌ Not a git repository");
-                    } else if log.contains("Untracked files") {
-                        println!("⚠️  Untracked files detected");
-                    } else if log.contains("Got diff content") {
-                        println!("📄 Analyzing changes...");
-                    } else {
-                        // Debug-level logs - uncomment to see all messages
-                        // println!("   {}", log);
+            Ok(ManagementResponse::ActorResult(res)) => {
+                completed = true;
+                match res {
+                    ActorResult::Success(data) => {
+                        println!("success!")
+                    }
+                    ActorResult::Error(err) => {
+                        println!("error: {}", err)
                     }
                 }
             }
