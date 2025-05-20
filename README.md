@@ -1,7 +1,5 @@
 # th-commit
 
-testing
-
 A simple CLI tool that creates git commits with AI-generated messages using the Theater runtime.
 
 ## Overview
