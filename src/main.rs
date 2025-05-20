@@ -6,6 +6,7 @@ use theater::client::TheaterConnection;
 use theater::events::EventData;
 use theater::id::TheaterId;
 use theater::messages::ActorResult;
+use theater::messages::{ChildError, ChildResult};
 use theater::theater_server::{ManagementCommand, ManagementResponse};
 use theater::ChainEvent;
 
@@ -101,8 +102,14 @@ async fn run_commit(
                         println!("✅ Commit actor started!");
                         println!("Actor ID: {}", id);
                     },
-                    ManagementResponse::ActorResult(res) => {
-                        println!("done");
+                    ManagementResponse::ActorResult(result) => {
+                        match result {
+                            ActorResult::Success(ChildResult { actor_id, result }) => {
+                            }
+                            ActorResult::Error(ChildError { actor_id, error }) => {
+
+                            }
+                        }
                         break;
                     }
                     ManagementResponse::Error { error } => {
