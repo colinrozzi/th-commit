@@ -93,87 +93,28 @@ async fn run_commit(
         .await
         .context("Failed to send StartActor command")?;
 
-    // Receive actor started response
-    let response = connection
-        .receive()
-        .await
-        .context("Failed to receive response")?;
-
-    match response {
-        ManagementResponse::ActorStarted { id } => {
-            println!("✅ Commit actor started!");
-            println!("Actor ID: {}", id);
-
-            // Wait for actor to complete
-            monitor_actor_progress(connection, id).await?;
-        }
-        ManagementResponse::Error { error } => {
-            println!("❌ Error starting commit actor: {:?}", error);
-        }
-        _ => {
-            println!("❓ Unexpected response: {:?}", response);
-        }
-    }
-
-    Ok(())
-}
-
-/// Monitor the progress of the commit actor
-async fn monitor_actor_progress(
-    connection: &mut TheaterConnection,
-    actor_id: TheaterId,
-) -> Result<()> {
-    println!("📝 Committing changes...");
-
-    // We're already subscribed from the StartActor command,
-    // so now we just listen for events
-    let mut completed = false;
-
-    while !completed {
-        match connection.receive().await {
-            Ok(ManagementResponse::ActorResult(res)) => {
-                completed = true;
-                match res {
-                    ActorResult::Success(data) => {
-                        println!("success!")
+    loop {
+        tokio::select! {
+            Ok(msg) = connection.receive() => {
+                match msg {
+                    ManagementResponse::ActorStarted { id } => {
+                        println!("✅ Commit actor started!");
+                        println!("Actor ID: {}", id);
+                    },
+                    ManagementResponse::ActorResult(res) => {
+                        println!("done");
+                        break;
                     }
-                    ActorResult::Error(err) => {
-                        println!("error: {}", err)
+                    ManagementResponse::Error { error } => {
+                        println!("❌ Error starting commit actor: {:?}", error);
+                    }
+                    _ => {
+                        println!("❓ Unexpected response: {:?}", msg);
                     }
                 }
             }
-            Ok(other) => {
-                // Uncomment for debugging
-                // println!("Other response: {:?}", other);
-            }
-            Err(e) => {
-                println!("❌ Error receiving events: {}", e);
-                completed = true;
-            }
         }
     }
 
     Ok(())
-}
-
-// Helper functions for chain events
-
-/// Extract the shutdown reason from a chain event, if present
-fn event_shutdown_data(event: &ChainEvent) -> Option<Vec<u8>> {
-    match serde_json::from_slice(&event.data) {
-        Ok(EventData::Runtime(theater::events::runtime::RuntimeEventData::ShutdownCall {
-            data,
-        })) => data,
-        _ => None,
-    }
-}
-
-/// Extract the log message from a chain event, if present
-fn event_log(event: &ChainEvent) -> Option<String> {
-    match serde_json::from_slice(&event.data) {
-        Ok(EventData::Runtime(theater::events::runtime::RuntimeEventData::Log {
-            message, ..
-        })) => Some(message),
-        _ => None,
-    }
 }
