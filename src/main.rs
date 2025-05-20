@@ -44,10 +44,16 @@ async fn main() -> Result<()> {
         .await
         .context("Failed to connect to Theater server")?;
 
-    println!("Connected to Theater server");
+    println!("✅ Connected to Theater server");
 
+    // Display a visual separator
+    println!("\n{}", "-".repeat(50));
+    
     // Run the commit process
     run_commit(&mut connection, current_dir, api_key).await?;
+    
+    // Display a visual separator at the end
+    println!("{}", "-".repeat(50));
 
     Ok(())
 }
@@ -65,7 +71,7 @@ async fn run_commit(
     repo_path: PathBuf,
     api_key: String,
 ) -> Result<()> {
-    println!("Starting commit process...");
+    println!("⏳ Starting commit process...");
 
     // Prepare the initial state for the commit-actor
     let initial_state = serde_json::json!({
@@ -81,8 +87,11 @@ async fn run_commit(
     let initial_state_bytes =
         serde_json::to_vec(&initial_state).context("Failed to serialize initial state")?;
 
-    println!("Starting commit-actor...");
+    // This line is now redundant as we have a more detailed message
+    // println!("Starting commit-actor...");
 
+    println!("🔍 Checking repository: {}", repo_path.display());
+    
     // Start the commit-actor
     connection
         .send(ManagementCommand::StartActor {
@@ -93,22 +102,53 @@ async fn run_commit(
         })
         .await
         .context("Failed to send StartActor command")?;
+        
+    println!("🤖 Starting Theater commit actor...");
 
     loop {
         tokio::select! {
             Ok(msg) = connection.receive() => {
                 match msg {
                     ManagementResponse::ActorStarted { id } => {
-                        println!("✅ Commit actor started!");
-                        println!("Actor ID: {}", id);
+                        println!("✅ Commit actor started! (ID: {})", id);
+                        println!("📁 Analyzing changes in repository...");
+                        println!("\n⏳ Working: This may take a moment...");
                     },
                     ManagementResponse::ActorResult(result) => {
                         match result {
                             ActorResult::Success(ChildResult { actor_id, result }) => {
-                                println!("{} {:?}", actor_id, result);
+                                if let Some(bytes) = result {
+                                    if let Ok(data) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                                        println!("\n✅ Commit operation completed");
+                                        
+                                        // Extract message
+                                        if let Some(message) = data.get("message").and_then(|m| m.as_str()) {
+                                            println!("{}", message);
+                                        }
+                                        
+                                        // Extract commit hash if available
+                                        if let Some(hash) = data.get("commit_hash").and_then(|h| h.as_str()) {
+                                            println!("Commit hash: {}", hash);
+                                        }
+                                        
+                                        // Show summary of changes if available
+                                        let files = data.get("files_changed").and_then(|f| f.as_u64()).unwrap_or(0);
+                                        let ins = data.get("insertions").and_then(|i| i.as_u64()).unwrap_or(0);
+                                        let dels = data.get("deletions").and_then(|d| d.as_u64()).unwrap_or(0);
+                                        
+                                        if files > 0 || ins > 0 || dels > 0 {
+                                            println!("Summary: {} files changed, {} insertions(+), {} deletions(-)", 
+                                                     files, ins, dels);
+                                        }
+                                    } else {
+                                        println!("Result from {}: {:?}", actor_id, String::from_utf8_lossy(&bytes));
+                                    }
+                                } else {
+                                    println!("Result from {}: No data returned", actor_id);
+                                }
                             }
                             ActorResult::Error(ChildError { actor_id, error }) => {
-                                println!("{} {}", actor_id, error);
+                                println!("❌ Error from actor {}: {}", actor_id, error);
                             }
                         }
                         break;
