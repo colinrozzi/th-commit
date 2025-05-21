@@ -7,40 +7,9 @@ fn get_terminal_width() -> usize {
         .unwrap_or(80)
 }
 
-// Print header with logo and title
+// Print simplified header with just the title
 pub fn print_header() {
-    let width = get_terminal_width().min(100);
-    let box_width = width.min(50);
-    let line = "─".repeat(box_width - 2);
-
-    println!("{}", format!("╭{}╮", line).bright_blue());
-    println!(
-        "{}",
-        format!("│{}│", " ".repeat(box_width - 2)).bright_blue()
-    );
-
-    // Calculate proper padding for center alignment
-    let title = "🎭  Theater Commit";
-    let title_len = title.chars().count();
-    let left_padding = (box_width - 2 - title_len) / 2;
-    let right_padding = box_width - 2 - title_len - left_padding - 1;
-
-    println!(
-        "{}",
-        format!(
-            "│{}{}{}│",
-            " ".repeat(left_padding),
-            title,
-            " ".repeat(right_padding)
-        )
-        .bright_blue()
-    );
-
-    println!(
-        "{}",
-        format!("│{}│", " ".repeat(box_width - 2)).bright_blue()
-    );
-    println!("{}", format!("╰{}╯", line).bright_blue());
+    println!("{}", "🎭  Theater Commit".bright_blue().bold());
 }
 
 // Print section title
@@ -109,20 +78,11 @@ pub fn print_commit_message(message: &str) {
     println!("  └{}┘", line);
 }
 
-// Print a completion summary with execution time
+// Print a minimal completion message
 pub fn print_completion(success: bool, duration_secs: f64) {
-    println!();
     if success {
-        println!(
-            "{} in {:.1}s",
-            "Completed successfully".green(),
-            duration_secs
-        );
+        println!("Done {:?}s", duration_secs);
     } else {
-        println!(
-            "{} in {:.1}s",
-            "Completed with issues".yellow(),
-            duration_secs
-        );
+        println!("Done with issues {:?}s", duration_secs);
     }
 }
