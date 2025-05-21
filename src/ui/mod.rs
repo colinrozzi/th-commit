@@ -103,7 +103,7 @@ pub fn print_commit_message(message: &str) {
     for line in message.lines() {
         // Use unicode-aware character counting to get proper length
         let char_count = line.chars().count();
-        let padding = width.saturating_sub(char_count);
+        let padding = width.saturating_sub(char_count) - 1;
         println!("  │ {}{} │", line, " ".repeat(padding));
     }
 
