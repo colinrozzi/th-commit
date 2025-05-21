@@ -16,7 +16,19 @@ pub fn print_header() {
     
     println!("{}", format!("╭{}╮", line).bright_blue());
     println!("{}", format!("│{}│", " ".repeat(box_width - 2)).bright_blue());
-    println!("{}", format!("│  🎭  Theater Commit{}│", " ".repeat(box_width - 21)).bright_blue());
+    
+    // Calculate proper padding for center alignment
+    let title = "🎭  Theater Commit";
+    let title_len = title.chars().count();
+    let left_padding = (box_width - 2 - title_len) / 2;
+    let right_padding = box_width - 2 - title_len - left_padding;
+    
+    println!("{}", format!("│{}{}{}│", 
+        " ".repeat(left_padding), 
+        title,
+        " ".repeat(right_padding)
+    ).bright_blue());
+    
     println!("{}", format!("│{}│", " ".repeat(box_width - 2)).bright_blue());
     println!("{}", format!("╰{}╯", line).bright_blue());
 }
@@ -78,8 +90,11 @@ pub fn print_commit_message(message: &str) {
     
     // Split message by lines and print each with padding
     for line in message.lines() {
-        let padding = width.saturating_sub(line.chars().count());
-        println!("  │ {}{} │", line, " ".repeat(padding));
+        // Use unicode-aware character counting to get proper length
+        let char_count = line.chars().count();
+        let padding = width.saturating_sub(char_count);
+        // Make sure we have exactly one space at the end before the border
+        println!("  │ {}{}│", line, " ".repeat(padding));
     }
     
     println!("  └{}┘", line);
