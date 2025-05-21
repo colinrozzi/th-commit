@@ -40,13 +40,21 @@ async fn main() -> Result<()> {
 
     // Variable to track operation success
     let mut operation_success = true;
-    
+
     // Display the styled header
     ui::print_header();
-    
+
     // Print repository and server info
-    ui::print_item("Repository", &current_dir.display().to_string(), Some("highlight"));
-    ui::print_item("Theater server", &server_address.to_string(), Some("highlight"));
+    ui::print_item(
+        "Repository",
+        &current_dir.display().to_string(),
+        Some("highlight"),
+    );
+    ui::print_item(
+        "Theater server",
+        &server_address.to_string(),
+        Some("highlight"),
+    );
     ui::print_status("Connecting to Theater server...", "info");
 
     // Connect to the Theater server
@@ -64,7 +72,7 @@ async fn main() -> Result<()> {
 
     // Display a visual separator at the end
     ui::print_separator();
-    
+
     // Print completion message with time
     let duration = start_time.elapsed().as_secs_f64();
     ui::print_completion(operation_success, duration);
@@ -102,7 +110,10 @@ async fn run_commit(
     let initial_state_bytes =
         serde_json::to_vec(&initial_state).context("Failed to serialize initial state")?;
 
-    ui::print_status(format!("Checking repository: {}", repo_path.display()), "analyzing");
+    ui::print_status(
+        format!("Checking repository: {}", repo_path.display()),
+        "analyzing",
+    );
 
     // Start the commit-actor
     connection
@@ -119,7 +130,7 @@ async fn run_commit(
 
     // Operation success flag
     let mut operation_success = false;
-    
+
     loop {
         tokio::select! {
             Ok(msg) = connection.receive() => {
@@ -171,7 +182,7 @@ async fn run_commit(
 
                                             // Print results section
                                             ui::print_section("📋 Results");
-                                            
+
                                             // Print operation status
                                             if success {
                                                 ui::print_status("Commit operation completed", "success");
@@ -180,7 +191,7 @@ async fn run_commit(
                                                 ui::print_status("Commit operation completed with issues", "warning");
                                                 operation_success = false;
                                             }
-                                            
+
                                             // Print message
                                             if let Some(msg) = message {
                                                 ui::print_item("Message", &msg, if success { Some("success") } else { Some("warning") });
@@ -212,7 +223,7 @@ async fn run_commit(
                                             // Fall back to the regular JSON format
                                             // Check if the operation was successful or not
                                             let success = data.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
-                                            
+
                                             // Print results section
                                             ui::print_section("📋 Results");
 
