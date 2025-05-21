@@ -24,7 +24,7 @@ pub fn print_header() {
     let title = "🎭  Theater Commit";
     let title_len = title.chars().count();
     let left_padding = (box_width - 2 - title_len) / 2;
-    let right_padding = box_width - 2 - title_len - left_padding;
+    let right_padding = box_width - 2 - title_len - left_padding - 1;
 
     println!(
         "{}",
@@ -95,7 +95,7 @@ pub fn print_separator() {
 // Print a framed box for commit messages
 pub fn print_commit_message(message: &str) {
     let width = get_terminal_width().min(90) - 6;
-    let line = "─".repeat(width + 1);
+    let line = "─".repeat(width);
 
     println!("  ┌{}┐", line);
 
@@ -104,7 +104,6 @@ pub fn print_commit_message(message: &str) {
         // Use unicode-aware character counting to get proper length
         let char_count = line.chars().count();
         let padding = width.saturating_sub(char_count);
-        // Make sure we have exactly one space at the end before the border
         println!("  │ {}{} │", line, " ".repeat(padding));
     }
 
