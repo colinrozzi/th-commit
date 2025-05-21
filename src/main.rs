@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::time::Instant;
 use theater::client::TheaterConnection;
 use theater::messages::ActorResult;
 use theater::messages::{ChildError, ChildResult};
@@ -22,9 +21,6 @@ async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
-    // Start a timer to track execution time
-    let start_time = Instant::now();
-
     // Get the current directory
     let current_dir = env::current_dir().context("Failed to get current directory")?;
 
@@ -37,9 +33,6 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| DEFAULT_SERVER_ADDRESS.to_string())
         .parse()
         .context("Invalid server address format")?;
-
-    // Variable to track operation success
-    let operation_success;
 
     // Display the styled header
     ui::print_header();
@@ -59,13 +52,7 @@ async fn main() -> Result<()> {
     // Remove the connected message and separator
 
     // Run the commit process
-    operation_success = run_commit(&mut connection, current_dir, api_key).await?;
-
-    // Remove the visual separator at the end
-
-    // Print completion message with time
-    let duration = start_time.elapsed().as_secs_f64();
-    ui::print_completion(operation_success, duration);
+    run_commit(&mut connection, current_dir, api_key).await?;
 
     Ok(())
 }
@@ -82,8 +69,7 @@ async fn run_commit(
     connection: &mut TheaterConnection,
     repo_path: PathBuf,
     api_key: String,
-) -> Result<bool> {
-
+) -> Result<()> {
     // Prepare the initial state for the commit-actor
     let initial_state = serde_json::json!({
         "repository_path": repo_path.to_string_lossy(),
@@ -112,9 +98,6 @@ async fn run_commit(
         .context("Failed to send StartActor command")?;
 
     // Remove starting actor status
-
-    // Operation success flag
-    let mut operation_success = false;
 
     loop {
         tokio::select! {
@@ -163,9 +146,6 @@ async fn run_commit(
                                                 }
                                             }
 
-                                            // Just track operation success without printing status
-                                            operation_success = success;
-
                                             // Only print message if there are issues (not success)
                                             if !success {
                                                 if let Some(msg) = message {
@@ -198,7 +178,6 @@ async fn run_commit(
                                             // Fall back to the regular JSON format
                                             // Just track operation success without printing status
                                             let success = data.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
-                                            operation_success = success;
 
                                             // Only print message if there are issues (not success)
                                             if !success {
@@ -242,13 +221,11 @@ async fn run_commit(
                             }
                             ActorResult::Error(ChildError { actor_id: _, error }) => {
                                 ui::print_item("Error", &error.to_string(), Some("error"));
-                                operation_success = false;
                             }
                         }
                         break;
                     }
                     ManagementResponse::Error { error } => {
-                        operation_success = false;
                         ui::print_item("Error", &format!("{:?}", error), Some("error"));
                     }
                     _ => {
@@ -259,5 +236,5 @@ async fn run_commit(
         }
     }
 
-    Ok(operation_success)
+    Ok(())
 }

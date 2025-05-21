@@ -77,12 +77,3 @@ pub fn print_commit_message(message: &str) {
 
     println!("  └{}┘", line);
 }
-
-// Print a minimal completion message
-pub fn print_completion(success: bool, duration_secs: f64) {
-    if success {
-        println!("Done {:?}s", duration_secs);
-    } else {
-        println!("Done with issues {:?}s", duration_secs);
-    }
-}
