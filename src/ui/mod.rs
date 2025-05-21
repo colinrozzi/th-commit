@@ -1,5 +1,4 @@
 use colored::*;
-use std::io::{self, Write};
 
 // Get terminal width (fallback to 80 if can't determine)
 fn get_terminal_width() -> usize {
@@ -110,11 +109,6 @@ pub fn print_commit_message(message: &str) {
     println!("  └{}┘", line);
 }
 
-// Print error message
-pub fn print_error(message: &str) {
-    eprintln!("{} {}", "Error:".bold().red(), message);
-}
-
 // Print a completion summary with execution time
 pub fn print_completion(success: bool, duration_secs: f64) {
     println!();
@@ -131,15 +125,4 @@ pub fn print_completion(success: bool, duration_secs: f64) {
             duration_secs
         );
     }
-}
-
-// Clear current line and write new content
-pub fn update_status(message: &str) -> io::Result<()> {
-    let mut stdout = io::stdout();
-    // Clear the current line
-    write!(stdout, "\r\x1B[K")?;
-    // Write the new status
-    write!(stdout, "{}", message)?;
-    stdout.flush()?;
-    Ok(())
 }

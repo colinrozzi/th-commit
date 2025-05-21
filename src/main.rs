@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
         .context("Invalid server address format")?;
 
     // Variable to track operation success
-    let mut operation_success = true;
+    let operation_success;
 
     // Display the styled header
     ui::print_header();
