@@ -18,3 +18,7 @@ chrono = "0.4"
 
 # Local dependency on theater
 theater = { path = "/Users/colinrozzi/work/theater" }
+
+[[bin]]
+name = "commit"
+path = "src/main.rs"
