@@ -16,8 +16,9 @@ colored = "2.0"
 terminal_size = "0.2"
 chrono = "0.4"
 
-# Local dependency on theater
-theater = { path = "/Users/colinrozzi/work/theater" }
+# Enhanced theater client library
+theater-client = { path = "/Users/colinrozzi/work/theater/crates/theater-client" }
+theater = { path = "/Users/colinrozzi/work/theater/crates/theater" }
 
 [[bin]]
 name = "commit"
