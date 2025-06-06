@@ -8,8 +8,8 @@ use serde_json::json;
 use std::env;
 use std::net::SocketAddr;
 use std::time::Duration;
-use theater::id::TheaterId;
 use theater::ChainEvent;
+use theater::{id::TheaterId, messages::ActorResult};
 use theater_client::TheaterConnection;
 use theater_server::{ManagementCommand, ManagementResponse};
 use tokio::time::timeout;
@@ -95,7 +95,8 @@ impl EventDrivenClient {
         &mut self,
         manifest_path: &str,
         initial_state: serde_json::Value,
-    ) -> Result<TheaterId> {
+        verbose: bool,
+    ) -> Result<Option<Vec<u8>>> {
         // Serialize initial state to bytes
         let initial_state_bytes = serde_json::to_vec(&initial_state)?;
 
@@ -114,13 +115,41 @@ impl EventDrivenClient {
             let response = self.connection.receive().await?;
             match response {
                 ManagementResponse::ActorStarted { id } => {
-                    return Ok(id);
+                    // Send commit request
+                    let commit_request = json!({
+                        "action": "commit",
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+
+                    let message_bytes = serde_json::to_vec(&commit_request)?;
+                    let command = ManagementCommand::RequestActorMessage {
+                        id: id.clone(),
+                        data: message_bytes,
+                    };
+
+                    self.connection.send(command).await?;
                 }
                 ManagementResponse::ActorEvent { event } => {
-                    handle_commit_event(&event);
+                    if verbose {
+                        handle_commit_event(&event);
+                    }
                 }
                 ManagementResponse::Error { error } => {
                     return Err(anyhow!("Failed to start actor: {:?}", error));
+                }
+                ManagementResponse::ActorResult(result) => {
+                    if verbose {
+                        println!("Actor result: {:?}", result);
+                    }
+                    match result {
+                        ActorResult::Error(err) => {
+                            return Err(anyhow!("Actor error: {:?}", err));
+                        }
+                        ActorResult::Success(data) => {
+                            // Return the initial state if available
+                            return Ok(data.result);
+                        }
+                    }
                 }
                 _ => {
                     // Other responses - continue processing
@@ -263,52 +292,18 @@ async fn execute_commit(
     println!("🚀 Starting commit actor...");
 
     // Start commit actor (this handles all the async message processing)
-    let actor_id = client
-        .start_actor(COMMIT_ACTOR_MANIFEST, initial_state)
+    let result_bytes = client
+        .start_actor(COMMIT_ACTOR_MANIFEST, initial_state, verbose)
         .await
-        .context("Failed to start commit actor")?;
+        .context("Failed to start commit actor")
+        .expect("Commit actor failed to start");
 
-    ui::print_item("Actor ID", &actor_id.to_string(), Some("info"));
-
-    // Subscribe to events (events will be handled automatically during request processing)
-    client
-        .subscribe_to_events(&actor_id)
-        .await
-        .context("Failed to subscribe to events")?;
-
-    // Send commit request
-    let commit_request = json!({
-        "action": "commit",
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    });
-
-    println!("📝 Requesting commit...");
-
-    // Use timeout for the entire operation
-    let operation = async {
-        let response_bytes = client
-            .request_actor_message(&actor_id, commit_request, verbose)
-            .await?;
-
-        // Parse response
-        let result: CommitResult =
-            serde_json::from_slice(&response_bytes).context("Failed to parse commit result")?;
-
-        Ok::<CommitResult, anyhow::Error>(result)
-    };
-
-    let result = timeout(Duration::from_secs(args.timeout_seconds), operation)
-        .await
-        .context("Commit operation timed out")?
-        .context("Commit operation failed")?;
+    // Parse response
+    let result: CommitResult =
+        serde_json::from_slice(&result_bytes.unwrap()).context("Failed to parse commit result")?;
 
     // Display results
     display_commit_result(&result)?;
-
-    // Clean shutdown
-    if let Err(e) = client.stop_actor(&actor_id).await {
-        eprintln!("Warning: Failed to stop actor: {}", e);
-    }
 
     Ok(())
 }
