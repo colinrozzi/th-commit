@@ -108,6 +108,8 @@ impl EventDrivenClient {
             let response = self.connection.receive().await?;
             match response {
                 ManagementResponse::ActorStarted { id } => {
+                    ui::print_item("Actor started", &id.to_string(), Some("highlight"));
+
                     // Send commit request
                     let commit_request = json!({
                         "action": "commit",
