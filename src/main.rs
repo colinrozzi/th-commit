@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::env;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::time::Duration;
 use theater::id::TheaterId;
 use theater::ChainEvent;
@@ -99,12 +100,36 @@ impl TheaterClient {
         
         self.connection.send(command).await?;
         
-        // Wait for response
-        let response = self.connection.receive().await?;
-        match response {
-            ManagementResponse::ActorStarted { id } => Ok(id),
-            ManagementResponse::Error { error } => Err(anyhow!("Failed to start actor: {:?}", error)),
-            _ => Err(anyhow!("Unexpected response: {:?}", response)),
+        // Wait for response - might be ActorStarted or immediate ActorEvent
+        loop {
+            let response = self.connection.receive().await?;
+            match response {
+                ManagementResponse::ActorStarted { id } => return Ok(id),
+                ManagementResponse::ActorEvent { event } => {
+                    // Actor started and is already sending events
+                    // Extract actor ID from the event description if possible
+                    if let Some(desc) = &event.description {
+                        // Look for pattern "Loading actor [actor-id]"
+                        if let Some(start) = desc.find("[") {
+                            if let Some(end) = desc.find("]") {
+                                let id_str = &desc[start+1..end];
+                                if let Ok(id) = TheaterId::from_str(id_str) {
+                                    // Handle this first event
+                                    handle_commit_event(&event);
+                                    return Ok(id);
+                                }
+                            }
+                        }
+                    }
+                    // Continue listening for ActorStarted response
+                    continue;
+                },
+                ManagementResponse::Error { error } => return Err(anyhow!("Failed to start actor: {:?}", error)),
+                _ => {
+                    // Unexpected response, but continue listening
+                    continue;
+                },
+            }
         }
     }
 
