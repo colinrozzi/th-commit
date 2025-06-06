@@ -74,13 +74,14 @@ struct EventDrivenClient {
 
 impl EventDrivenClient {
     async fn new(server_addr: &str) -> Result<Self> {
-        let addr: SocketAddr = server_addr.parse()
-            .context("Invalid server address")?;
-        
+        let addr: SocketAddr = server_addr.parse().context("Invalid server address")?;
+
         let mut connection = TheaterConnection::new(addr);
-        connection.connect().await
+        connection
+            .connect()
+            .await
             .context("Failed to connect to Theater server")?;
-        
+
         Ok(Self { connection })
     }
 
@@ -90,10 +91,14 @@ impl EventDrivenClient {
     }
 
     /// Start an actor and wait for it to start
-    async fn start_actor(&mut self, manifest_path: &str, initial_state: serde_json::Value) -> Result<TheaterId> {
+    async fn start_actor(
+        &mut self,
+        manifest_path: &str,
+        initial_state: serde_json::Value,
+    ) -> Result<TheaterId> {
         // Serialize initial state to bytes
         let initial_state_bytes = serde_json::to_vec(&initial_state)?;
-        
+
         // Send start actor command
         let command = ManagementCommand::StartActor {
             manifest: manifest_path.to_string(),
@@ -101,7 +106,7 @@ impl EventDrivenClient {
             parent: false,
             subscribe: true,
         };
-        
+
         self.connection.send(command).await?;
 
         // Process incoming messages until we get the actor ID
@@ -110,13 +115,13 @@ impl EventDrivenClient {
             match response {
                 ManagementResponse::ActorStarted { id } => {
                     return Ok(id);
-                },
+                }
                 ManagementResponse::ActorEvent { event } => {
                     handle_commit_event(&event);
-                },
+                }
                 ManagementResponse::Error { error } => {
                     return Err(anyhow!("Failed to start actor: {:?}", error));
-                },
+                }
                 _ => {
                     // Other responses - continue processing
                 }
@@ -125,13 +130,18 @@ impl EventDrivenClient {
     }
 
     /// Send a request to an actor and wait for response
-    async fn request_actor_message(&mut self, actor_id: &TheaterId, message: serde_json::Value) -> Result<Vec<u8>> {
+    async fn request_actor_message(
+        &mut self,
+        actor_id: &TheaterId,
+        message: serde_json::Value,
+        verbose: bool,
+    ) -> Result<Vec<u8>> {
         let message_bytes = serde_json::to_vec(&message)?;
         let command = ManagementCommand::RequestActorMessage {
             id: actor_id.clone(),
             data: message_bytes,
         };
-        
+
         self.connection.send(command).await?;
 
         // Process messages until we get the response
@@ -140,13 +150,20 @@ impl EventDrivenClient {
             match response {
                 ManagementResponse::RequestedMessage { message, .. } => {
                     return Ok(message);
-                },
+                }
                 ManagementResponse::ActorEvent { event } => {
-                    handle_commit_event(&event);
-                },
+                    if verbose {
+                        handle_commit_event(&event);
+                    }
+                }
                 ManagementResponse::Error { error } => {
                     return Err(anyhow!("Request failed: {:?}", error));
-                },
+                }
+                ManagementResponse::ActorResult(result) => {
+                    if verbose {
+                        println!("Actor result: {:?}", result);
+                    }
+                }
                 _ => {
                     // Other responses - continue processing
                 }
@@ -197,7 +214,7 @@ async fn main() -> Result<()> {
     );
 
     // Execute commit operation
-    execute_commit(&args, repo_path, api_key).await?;
+    execute_commit(&args, repo_path, api_key, args.verbose).await?;
 
     Ok(())
 }
@@ -220,9 +237,15 @@ fn validate_prerequisites() -> Result<()> {
     Ok(())
 }
 
-async fn execute_commit(args: &Args, repo_path: std::path::PathBuf, api_key: String) -> Result<()> {
+async fn execute_commit(
+    args: &Args,
+    repo_path: std::path::PathBuf,
+    api_key: String,
+    verbose: bool,
+) -> Result<()> {
     // Create event-driven client
-    let mut client = EventDrivenClient::new(&args.server).await
+    let mut client = EventDrivenClient::new(&args.server)
+        .await
         .context("Failed to connect to Theater server")?;
 
     info!("Connected to Theater server at {}", args.server);
@@ -248,7 +271,9 @@ async fn execute_commit(args: &Args, repo_path: std::path::PathBuf, api_key: Str
     ui::print_item("Actor ID", &actor_id.to_string(), Some("info"));
 
     // Subscribe to events (events will be handled automatically during request processing)
-    client.subscribe_to_events(&actor_id).await
+    client
+        .subscribe_to_events(&actor_id)
+        .await
         .context("Failed to subscribe to events")?;
 
     // Send commit request
@@ -262,12 +287,12 @@ async fn execute_commit(args: &Args, repo_path: std::path::PathBuf, api_key: Str
     // Use timeout for the entire operation
     let operation = async {
         let response_bytes = client
-            .request_actor_message(&actor_id, commit_request)
+            .request_actor_message(&actor_id, commit_request, verbose)
             .await?;
-        
+
         // Parse response
-        let result: CommitResult = serde_json::from_slice(&response_bytes)
-            .context("Failed to parse commit result")?;
+        let result: CommitResult =
+            serde_json::from_slice(&response_bytes).context("Failed to parse commit result")?;
 
         Ok::<CommitResult, anyhow::Error>(result)
     };
