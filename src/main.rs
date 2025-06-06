@@ -7,12 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::env;
 use std::net::SocketAddr;
-use std::time::Duration;
+use theater::messages::ActorResult;
 use theater::ChainEvent;
-use theater::{id::TheaterId, messages::ActorResult};
 use theater_client::TheaterConnection;
 use theater_server::{ManagementCommand, ManagementResponse};
-use tokio::time::timeout;
 use tracing::info;
 
 mod ui;
@@ -85,11 +83,6 @@ impl EventDrivenClient {
         Ok(Self { connection })
     }
 
-    /// Send a command to the server
-    async fn send_command(&mut self, command: ManagementCommand) -> Result<()> {
-        self.connection.send(command).await
-    }
-
     /// Start an actor and wait for it to start
     async fn start_actor(
         &mut self,
@@ -156,64 +149,6 @@ impl EventDrivenClient {
                 }
             }
         }
-    }
-
-    /// Send a request to an actor and wait for response
-    async fn request_actor_message(
-        &mut self,
-        actor_id: &TheaterId,
-        message: serde_json::Value,
-        verbose: bool,
-    ) -> Result<Vec<u8>> {
-        let message_bytes = serde_json::to_vec(&message)?;
-        let command = ManagementCommand::RequestActorMessage {
-            id: actor_id.clone(),
-            data: message_bytes,
-        };
-
-        self.connection.send(command).await?;
-
-        // Process messages until we get the response
-        loop {
-            let response = self.connection.receive().await?;
-            match response {
-                ManagementResponse::RequestedMessage { message, .. } => {
-                    return Ok(message);
-                }
-                ManagementResponse::ActorEvent { event } => {
-                    if verbose {
-                        handle_commit_event(&event);
-                    }
-                }
-                ManagementResponse::Error { error } => {
-                    return Err(anyhow!("Request failed: {:?}", error));
-                }
-                ManagementResponse::ActorResult(result) => {
-                    if verbose {
-                        println!("Actor result: {:?}", result);
-                    }
-                }
-                _ => {
-                    // Other responses - continue processing
-                }
-            }
-        }
-    }
-
-    /// Subscribe to actor events
-    async fn subscribe_to_events(&mut self, actor_id: &TheaterId) -> Result<()> {
-        let command = ManagementCommand::SubscribeToActor {
-            id: actor_id.clone(),
-        };
-        self.connection.send(command).await
-    }
-
-    /// Stop an actor
-    async fn stop_actor(&mut self, actor_id: &TheaterId) -> Result<()> {
-        let command = ManagementCommand::StopActor {
-            id: actor_id.clone(),
-        };
-        self.connection.send(command).await
     }
 }
 
