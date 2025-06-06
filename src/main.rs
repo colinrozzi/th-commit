@@ -103,7 +103,7 @@ impl EventDrivenClient {
         let command = ManagementCommand::StartActor {
             manifest: manifest_path.to_string(),
             initial_state: Some(initial_state_bytes),
-            parent: false,
+            parent: true,
             subscribe: true,
         };
 
