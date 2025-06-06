@@ -16,8 +16,9 @@ colored = "2.0"
 terminal_size = "0.2"
 chrono = "0.4"
 
-# Enhanced theater client library
+# Theater dependencies - using the actual Theater client
 theater-client = { path = "/Users/colinrozzi/work/theater/crates/theater-client" }
+theater-server = { path = "/Users/colinrozzi/work/theater/crates/theater-server" }
 theater = { path = "/Users/colinrozzi/work/theater/crates/theater" }
 
 [[bin]]
