@@ -153,10 +153,16 @@ impl TheaterClient {
         
         self.connection.send(command).await?;
         
-        // Wait for subscription confirmation
+        // Wait for subscription confirmation or handle immediate events
         let response = self.connection.receive().await?;
         match response {
             ManagementResponse::Subscribed { .. } => Ok(()),
+            ManagementResponse::ActorEvent { event } => {
+                // We got an event immediately, which means subscription worked
+                // Handle this first event
+                handle_commit_event(&event);
+                Ok(())
+            },
             ManagementResponse::Error { error } => Err(anyhow!("Failed to subscribe: {:?}", error)),
             _ => Err(anyhow!("Unexpected response: {:?}", response)),
         }
@@ -244,12 +250,6 @@ async fn execute_commit(args: &Args, repo_path: std::path::PathBuf, api_key: Str
 
     ui::print_item("Actor ID", &actor_id.to_string(), Some("info"));
 
-    // Subscribe to events for real-time progress updates
-    client
-        .subscribe_to_events(&actor_id)
-        .await
-        .context("Failed to subscribe to events")?;
-
     // Send commit request
     let commit_request = json!({
         "action": "commit",
@@ -260,16 +260,28 @@ async fn execute_commit(args: &Args, repo_path: std::path::PathBuf, api_key: Str
 
     // Create a second client for event monitoring (since we need concurrent operations)
     let mut event_client = TheaterClient::new(&args.server).await?;
-    event_client.subscribe_to_events(&actor_id).await?;
-
+    
     // Start event monitoring task
+    let event_actor_id = actor_id.clone();
     let event_handle = tokio::spawn(async move {
-        while let Ok(response) = event_client.receive().await {
-            match response {
-                ManagementResponse::ActorEvent { event } => {
-                    handle_commit_event(&event);
+        // Subscribe to events
+        let command = ManagementCommand::SubscribeToActor {
+            id: event_actor_id,
+        };
+        
+        if event_client.connection.send(command).await.is_ok() {
+            // Listen for events (including subscription confirmation)
+            while let Ok(response) = event_client.receive().await {
+                match response {
+                    ManagementResponse::Subscribed { .. } => {
+                        // Subscription confirmed, continue listening
+                        continue;
+                    },
+                    ManagementResponse::ActorEvent { event } => {
+                        handle_commit_event(&event);
+                    }
+                    _ => break, // Stop on other response types
                 }
-                _ => break, // Stop on non-event responses
             }
         }
     });
